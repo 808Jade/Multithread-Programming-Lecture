@@ -17,18 +17,18 @@ public:
 	void unlock() { mtx.unlock(); }
 };
 
-class C_SET {
+class C_STACK {
 private:
 	NODE* head, * tail;
 	std::mutex mtx;
 public:
-	C_SET() {
+	C_STACK() {
 		head = new NODE(std::numeric_limits<int>::min());
 		tail = new NODE(std::numeric_limits<int>::max());
 		head->next = tail;
 	}
 
-	~C_SET()
+	~C_STACK()
 	{
 		clear();
 		delete head;
@@ -128,7 +128,7 @@ public:
 	}
 };
 
-C_SET set;
+C_STACK set;
 
 void benchmark(const int num_threads)
 {

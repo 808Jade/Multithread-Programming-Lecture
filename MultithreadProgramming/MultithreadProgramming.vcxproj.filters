@@ -57,5 +57,11 @@
     <ClCompile Include="8_무잠금 만능SET.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="9_비멈충동기화 LF_QUEUE.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="10_무잠금 만능 STACK.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
