@@ -196,6 +196,7 @@ public:
 	STNODE(int v) : value(v) {}
 };
 
+
 class LFST_QUEUE32 {
 	STPTR head, tail;
 public:
@@ -278,7 +279,7 @@ public:
 
 class STNODE64;
 
-class STPTR64 {
+class alignas(16) STPTR64 {
 public:
 	STNODE64* volatile ptr;
 	long long stamp;
@@ -291,8 +292,8 @@ public:
 	}
 	STNODE64* get_ptr(long long* stamp) {
 		STPTR64 temp{ 0, 0 };
-		STPTR64 old{ 0,0 };
-		if (false == CAS128(&temp, &old, this)) {
+		STPTR64 old{ 0, 0 };
+		if (false == CAS128(&temp, &old, this)) { // temp°¡ old¸é this·Î ¹Ù²ã
 			std::cout << "CAS128 failed in get_ptr!\n";
 			exit(-1);
 		}
@@ -304,13 +305,12 @@ public:
 	{
 		return InterlockedCompareExchange128(
 			reinterpret_cast<long long*>(addr),
-			reinterpret_cast<long long>(new_value->ptr),
 			new_value->stamp,
+			reinterpret_cast<long long>(new_value->ptr),
 			reinterpret_cast<long long*>(expected));
 	}
 
-	bool CAS(STNODE64* old_value, STNODE64* new_value,
-		long long old_stamp, long long new_stamp)
+	bool CAS(STNODE64* old_value, STNODE64* new_value, long long old_stamp, long long new_stamp)
 	{
 		STPTR64 old_p{ old_value, old_stamp };
 		STPTR64 new_p{ new_value, new_stamp };
@@ -318,7 +318,7 @@ public:
 	}
 };
 
-class alignas(16) STNODE64 {
+class STNODE64 {
 public:
 	long long value;
 	STPTR64 next;
@@ -379,8 +379,10 @@ public:
 			STNODE64* old_next = old_head->next.get_ptr(&next_stamp);
 			long long tail_stamp = 0;
 			STNODE64* old_tail = tail.get_ptr(&tail_stamp);
-			if (old_head != head.get_ptr())	continue;
-			if (old_next == nullptr) return -1;
+			if (old_head != head.get_ptr())	
+				continue;
+			if (old_next == nullptr) 
+				return -1;
 			if (old_tail == old_head) {
 				tail.CAS(old_tail, old_next, tail_stamp, tail_stamp + 1);
 				continue;
@@ -402,8 +404,7 @@ public:
 	}
 };
 
-
-LFST_QUEUE64 my_queue;
+LF_QUEUE my_queue;
 
 const int NUM_TEST = 10000000;
 

@@ -63,5 +63,8 @@
     <ClCompile Include="10_무잠금 만능 STACK.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="LFST_QEUEUE64.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

@@ -180,7 +180,7 @@ void benchmark_test(const int th_id, const int num_threads, HISTORY& h)
 	}
 }
 
-void check_history(std::vector <HISTORY>& h)
+void check_history(std::vector<HISTORY>& h)
 {
 	std::unordered_multiset <int> pushed, poped, in_stack;
 
