@@ -4,8 +4,11 @@
 #include <chrono>
 #include <mutex>
 #include <windows.h>
+#include <queue>
 
 const int MAX_THREADS = 32;
+
+thread_local std::queue<STNODE64*> free_nodes;
 
 class STNODE64;
 
@@ -82,6 +85,11 @@ public:
 	void enqueue(int x)
 	{
 		STNODE64* new_node = new STNODE64(x);
+		if (free_nodes.empty()) new_node = new STNODE64(x);
+		else {
+			new_node = free_nodes.front();
+			
+		}
 		while (true) {
 			long long tail_stamp = 0;
 			STNODE64* old_tail = tail.get_ptr(&tail_stamp);
@@ -119,7 +127,8 @@ public:
 			}
 			int res = old_next->value;
 			if (true == head.CAS(old_head, old_next, head_stamp, head_stamp + 1)) {
-				delete old_head;
+				// 여기도 delete 하지 말고 free_nodes 이용..
+				//delete old_head;
 				return res;
 			}
 		}
