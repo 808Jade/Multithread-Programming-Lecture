@@ -7,6 +7,7 @@
 #include <unordered_set>
 
 const int MAX_THREADS = 16;
+int num_threads = 0;
 
 class NODE {
 public:
@@ -134,7 +135,93 @@ public:
 	}
 };
 
-LF_STACK my_stack;
+class BACKOFF {
+	int min_delay;
+	int max_delay;
+	int limit;
+public:
+	BACKOFF(int min_d, int max_d)
+		: min_delay(min_d), max_delay(max_d), limit(min_d) {
+		if (0 == limit) {
+			std::cout << "Backoff min_delay cannot be zero.\n";
+			exit(-1);
+		}
+
+	}
+	void backoff() {
+		auto delay = rand() % limit;
+		limit += limit;
+		if (limit > max_delay) limit = max_delay;
+		//std::this_thread::sleep_for(std::chrono::microseconds(delay));
+		for (int i = 0; i < delay; i++) _mm_pause();
+	}
+};
+
+class LFBO_STACK {
+	NODE* volatile top;
+public:
+	LFBO_STACK() {
+		top = nullptr;
+	}
+
+	~LFBO_STACK() {
+		clear();
+	}
+
+	void clear() {
+		while (nullptr != top) pop();
+	}
+
+	bool CAS(NODE* volatile* addr, NODE* expected, NODE* new_value)
+	{
+		return std::atomic_compare_exchange_strong(
+			reinterpret_cast<volatile std::atomic<NODE*>*>(addr),
+			&expected,
+			new_value);
+	}
+
+	void push(int x)
+	{
+		BACKOFF bo(1, num_threads);
+		NODE* new_node = new NODE(x);
+		while (true) {
+			auto last = top;
+			new_node->next = last;
+			if (true == CAS(&top, last, new_node))
+				return;
+			bo.backoff();
+		}
+	}
+
+	int pop()
+	{
+		BACKOFF bo(1, num_threads);
+		while (true) {
+			auto last = top;
+			if (nullptr == last) {
+				return -2;
+			}
+			auto next = last->next;
+			if (last != top) continue;
+			int v = last->value;
+			if (true == CAS(&top, last, next)) {
+				// delete last;
+				return v;
+			}
+			bo.backoff();
+		}
+	}
+
+	void print20()
+	{
+		NODE* curr = top;
+		for (int i = 0; i < 20 && curr != nullptr; i++, curr = curr->next)
+			std::cout << curr->value << ", ";
+		std::cout << "\n";
+	}
+};
+
+LFBO_STACK my_stack;
 
 struct HISTORY {
 	std::vector <int> push_values, pop_values;

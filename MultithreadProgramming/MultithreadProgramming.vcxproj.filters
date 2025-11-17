@@ -60,10 +60,22 @@
     <ClCompile Include="9_비멈충동기화 LF_QUEUE.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="10_무잠금 만능 STACK.cpp">
+    <ClCompile Include="10-1 STACK.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="LFST_QEUEUE64.cpp">
+    <ClCompile Include="9-1 LFST_QEUEUE64.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="11-1 C_SKLIST.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="10-3 소거스택 LFEL_STACK.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="10-2_LFBO_STACK.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="LFBO_STACK.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>

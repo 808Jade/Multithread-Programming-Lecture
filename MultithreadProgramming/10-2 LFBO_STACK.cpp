@@ -17,122 +17,7 @@ public:
 	NODE(int v) : value(v), next(nullptr) {}
 };
 
-class DUMMY_MUTEX {
-public:
-	void lock() {}
-	void unlock() {}
-};
-
-class C_STACK {
-	NODE* top;
-	DUMMY_MUTEX set_lock;
-public:
-	C_STACK() {
-		top = nullptr;
-	}
-
-	~C_STACK() {
-		clear();
-	}
-
-	void clear() {
-		while (nullptr != top) pop();
-	}
-
-	void push(int x)
-	{
-		NODE* new_node = new NODE(x);
-		set_lock.lock();
-		new_node->next = top;
-		top = new_node;
-		set_lock.unlock();
-	}
-
-	int pop()
-	{
-		set_lock.lock();
-		if (nullptr == top) {
-			set_lock.unlock();
-			return -2;
-		}
-		int res = top->value;
-		auto temp = top;
-		top = top->next;
-		set_lock.unlock();
-		delete temp;
-		return res;
-	}
-
-	void print20()
-	{
-		NODE* curr = top;
-		for (int i = 0; i < 20 && curr != nullptr; i++, curr = curr->next)
-			std::cout << curr->value << ", ";
-		std::cout << "\n";
-	}
-};
-
-class LF_STACK {
-	NODE* volatile top;
-public:
-	LF_STACK() {
-		top = nullptr;
-	}
-
-	~LF_STACK() {
-		clear();
-	}
-
-	void clear() {
-		while (nullptr != top) pop();
-	}
-
-	bool CAS(NODE* volatile* addr, NODE* expected, NODE* new_value)
-	{
-		return std::atomic_compare_exchange_strong(
-			reinterpret_cast<volatile std::atomic<NODE*>*>(addr),
-			&expected,
-			new_value);
-	}
-
-	void push(int x)
-	{
-		NODE* new_node = new NODE(x);
-		while (true) {
-			auto last = top;
-			new_node->next = last;
-			if (true == CAS(&top, last, new_node))
-				return;
-		}
-	}
-
-	int pop()
-	{
-		while (true) {
-			auto last = top;
-			if (nullptr == last) {
-				return -2;
-			}
-			auto next = last->next;
-			if (last != top) continue;
-			int v = last->value;
-			if (true == CAS(&top, last, next)) {
-				// delete last;
-				return v;
-			}
-		}
-	}
-
-	void print20()
-	{
-		NODE* curr = top;
-		for (int i = 0; i < 20 && curr != nullptr; i++, curr = curr->next)
-			std::cout << curr->value << ", ";
-		std::cout << "\n";
-	}
-};
-
-class BACKOFF {
+class BACKOFF{
 	int min_delay;
 	int max_delay;
 	int limit;
@@ -154,36 +39,14 @@ public:
 	}
 };
 
-constexpr int ST_EMPTY = 0;
-constexpr int ST_WAITING = 1;
-constexpr int ST_BUST = 2;
-class LockFreeExchanger {
-	std::atomic<long long> slot;
-
-public:
-	LockFreeExchanger() {
-		slot.store(-1);
-	}
-
-	int exchange(int my_item, bool* busy) {
-		*busy = false;
-		while (true) {
-
-		}
-	}
-};
-
-class EliminationArray;
-
-class LFEL_STACK {
+class LFBO_STACK {
 	NODE* volatile top;
-	
 public:
-	LFEL_STACK() {
+	LFBO_STACK() {
 		top = nullptr;
 	}
 
-	~LFEL_STACK() {
+	~LFBO_STACK() {
 		clear();
 	}
 
@@ -240,7 +103,7 @@ public:
 	}
 };
 
-LFEL_STACK my_stack;
+LFBO_STACK my_stack;
 
 struct HISTORY {
 	std::vector <int> push_values, pop_values;
@@ -330,26 +193,26 @@ int main()
 {
 	using namespace std::chrono;
 
-	/*for (int n = 1; n <= MAX_THREADS; n = n * 2) {
-		num_threads = n;
-		my_stack.clear();
-		std::vector<std::thread> tv;
-		std::vector<HISTORY> history;
-		history.resize(n);
-		stack_size = 0;
-		auto start_t = high_resolution_clock::now();
-		for (int i = 0; i < n; ++i) {
-			tv.emplace_back(benchmark_test, i, n, std::ref(history[i]));
-		}
-		for (auto& th : tv)
-			th.join();
-		auto end_t = high_resolution_clock::now();
-		auto exec_t = end_t - start_t;
-		size_t ms = duration_cast<milliseconds>(exec_t).count();
-		std::cout << n << " Threads,  " << ms << "ms. ----";
-		my_stack.print20();
-		check_history(history);
-	}*/
+	//for (int n = 1; n <= MAX_THREADS; n = n * 2) {
+	//	num_threads = n;
+	//	my_stack.clear();
+	//	std::vector<std::thread> tv;
+	//	std::vector<HISTORY> history;
+	//	history.resize(n);
+	//	stack_size = 0;
+	//	auto start_t = high_resolution_clock::now();
+	//	for (int i = 0; i < n; ++i) {
+	//		tv.emplace_back(benchmark_test, i, n, std::ref(history[i]));
+	//	}
+	//	for (auto& th : tv)
+	//		th.join();
+	//	auto end_t = high_resolution_clock::now();
+	//	auto exec_t = end_t - start_t;
+	//	size_t ms = duration_cast<milliseconds>(exec_t).count();
+	//	std::cout << n << " Threads,  " << ms << "ms. ----";
+	//	my_stack.print20();
+	//	check_history(history);
+	//}
 
 	for (int n = 1; n <= MAX_THREADS; n *= 2) {
 		num_threads = n;
