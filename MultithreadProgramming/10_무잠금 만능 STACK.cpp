@@ -21,15 +21,15 @@ public:
 	void unlock() {}
 };
 
-class C_STACK {
+class C_SKLIST {
 	NODE* top;
 	std::mutex set_lock;
 public:
-	C_STACK() {
+	C_SKLIST() {
 		top = nullptr;
 	}
 
-	~C_STACK() {
+	~C_SKLIST() {
 		clear();
 	}
 

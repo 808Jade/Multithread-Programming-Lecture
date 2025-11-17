@@ -17,18 +17,18 @@ public:
 	void unlock() { mtx.unlock(); }
 };
 
-class C_STACK {
+class C_SKLIST {
 private:
 	NODE* head, * tail;
 	std::mutex mtx;
 public:
-	C_STACK() {
+	C_SKLIST() {
 		head = new NODE(std::numeric_limits<int>::min());
 		tail = new NODE(std::numeric_limits<int>::max());
 		head->next = tail;
 	}
 
-	~C_STACK()
+	~C_SKLIST()
 	{
 		clear();
 		delete head;
@@ -128,7 +128,7 @@ public:
 	}
 };
 
-C_STACK set;
+C_SKLIST set;
 
 void benchmark(const int num_threads)
 {
