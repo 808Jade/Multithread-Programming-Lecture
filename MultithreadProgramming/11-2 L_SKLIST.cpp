@@ -22,7 +22,7 @@ public:
 	volatile bool fully_linked;
 	std::recursive_mutex mtx;
 
-	SKNODE(int x, int top) : value(x), top_level(top)
+	SKNODE(int x, int top) : value(x), top_level(top), marked(false), fully_linked(false)
 	{
 		for (auto& p : next) p = nullptr;
 	}
@@ -85,10 +85,13 @@ public:
 		for (top_level = 0; top_level < MAX_LEVEL; ++top_level) {
 			if (rand() % 2 == 0) break;
 		}
+
 		while (true) {
 			SKNODE* prevs[MAX_LEVEL + 1];
 			SKNODE* currs[MAX_LEVEL + 1];
+
 			int f_level = find(prevs, currs, x);
+
 			if (f_level != -1) {
 				SKNODE* node_found = currs[f_level];
 				if (!node_found->marked) {
@@ -97,37 +100,32 @@ public:
 				}
 				continue;
 			}
-			SKNODE* newNode = new SKNODE(x, top_level);
-			for (int level = 0; level <= top_level; ++level)
-				newNode->next[level] = currs[level];
 
 			// Locking
 			int highest_locked = -1;
-			// - try
 			bool valid = true;
-			for (int level = 0; valid && level <= top_level; ++level) {
+			for (int level = 0; level <= top_level; ++level) {
 				prevs[level]->mtx.lock();
 				highest_locked = level;
 
-				//valid &= !prevs[level]->marked && (prevs[level]->next[level] == currs[level]);
-				// 락 잡은 후 구조가 여전히 유효한지 재확인
-				if (prevs[level]->marked || prevs[level]->next[level] != currs[level]) {
-					valid = false;
-					break;
-				}
+				valid = !prevs[level]->marked 
+					 && !currs[level]->marked 
+					 && prevs[level]->next[level] == currs[level];
 			}
-			//if (false == valid) continue;
-			// 유효성 실패 → 락 해제하고 다시 시도
-			if (!valid) {
+
+			if (false == valid) {
 				for (int i = 0; i <= highest_locked; ++i)
 					prevs[i]->mtx.unlock();
 				continue;
 			}
+
+			SKNODE* newNode = new SKNODE(x, top_level);
 			for (int level = 0; level <= top_level; ++level)
 				newNode->next[level] = currs[level];
 			for (int level = 0; level <= top_level; ++level)
 				prevs[level]->next[level] = newNode;
 			newNode->fully_linked = true;
+
 			// -finally
 			for (int i = 0; i <= highest_locked; ++i)
 				prevs[i]->mtx.unlock();
@@ -140,33 +138,31 @@ public:
 		SKNODE* prevs[MAX_LEVEL + 1];
 		SKNODE* currs[MAX_LEVEL + 1];
 
-		int f_level = find(prevs, currs, x);
-
-		if (f_level == -1) return false;
-		// Marking
-		SKNODE* victim = currs[f_level];
-		if (victim->marked) return false;
-		if (!victim->fully_linked) return false;
-		if (victim->top_level != f_level) return false;
-
-		victim->mtx.lock();
-		if (victim->marked) {
-			victim->mtx.unlock();
-			return false;
-		}
-		victim->marked = true;
-		int top_level = victim->top_level;
-		bool valid = true;
 		while (true) {
+			int f_level = find(prevs, currs, x);
+			if (f_level == -1) return false;
+			// Marking
+			SKNODE* victim = currs[f_level];
+			if (victim->marked) return false;
+			if (!victim->fully_linked) return false;
+			if (victim->top_level != f_level) return false;
+
+			int top_level = victim->top_level;
+			victim->mtx.lock();
+			if (victim->marked) {
+				victim->mtx.unlock();
+				return false;
+			}
+
+			victim->marked = true;
+		
+			bool valid = true;
+			
 			int highest_locked = -1;
 			for (int i = 0; i <= top_level; ++i) {
 				prevs[i]->mtx.lock();
 				highest_locked = i;
-				//if (false == (!prevs[i]->marked)
-				//	&& (prevs[i]->next[i] == victim))
-				//	break;
-				//if (!(!prevs[i]->marked && prevs[i]->next[i] == victim)) 
-				//	break;
+				valid = !prevs[i]->marked && prevs[i]->next[i] == victim;
 			}
 			if (false == valid) {
 				for (int i = 0; i <= highest_locked; ++i)
