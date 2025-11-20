@@ -75,5 +75,8 @@
     <ClCompile Include="10-2 LFBO_STACK.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="11-2 L_SKLIST.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
