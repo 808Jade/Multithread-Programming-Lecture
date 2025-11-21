@@ -13,37 +13,80 @@ thread_local int thread_id = 0;
 
 constexpr int MAX_LEVEL = 9;
 
-class SKNODE {
+class LFSKNODE;
+class AMRSK { // Atomic Markable Reference
+	volatile long long ptr_and_mark;
+public:
+	AMRSK(LFSKNODE* ptr = nullptr, bool mark = false) {
+		long long val = reinterpret_cast<long long>(ptr);
+		if (0 != (val & 1)) {  // 수정!!!!!
+			std::cout << "ERROR"; exit(-1);
+		}
+		if (true == mark) val |= 1;
+		ptr_and_mark = val;
+	}
+
+	LFSKNODE* get_ptr() {
+		long long val = ptr_and_mark;
+		return reinterpret_cast<LFSKNODE*>(val & 0xFFFFFFFFFFFFFFFE);
+	}
+	bool get_mark() {
+		return (1 == (ptr_and_mark & 1));
+	}
+	LFSKNODE* get_ptr_and_mark(bool* mark) {
+		long long val = ptr_and_mark;
+		*mark = (1 == (val & 1));
+		return reinterpret_cast<LFSKNODE*>(val & 0xFFFFFFFFFFFFFFFE);
+	}
+
+	bool attempt_mark(LFSKNODE* expected_ptr, bool new_mark)
+	{
+		return CAS(expected_ptr, expected_ptr,
+			false, new_mark);
+	}
+
+	bool CAS(LFSKNODE* expected_ptr, LFSKNODE* new_ptr,
+		bool expected_mark, bool new_mark)
+	{
+		long long expected_val
+			= reinterpret_cast<long long>(expected_ptr);
+		if (true == expected_mark) expected_val |= 1;
+		long long new_val
+			= reinterpret_cast<long long>(new_ptr);
+		if (true == new_mark) new_val |= 1;
+		return std::atomic_compare_exchange_strong(
+			reinterpret_cast<volatile std::atomic<long long> *>(&ptr_and_mark),
+			&expected_val, new_val);
+	}
+
+};
+
+class LFSKNODE {
 public:
 	int value;
-	SKNODE* volatile next[MAX_LEVEL + 1];
+	AMRSK next[MAX_LEVEL + 1];
 	int top_level;
-	volatile bool marked;
-	volatile bool fully_linked;
-	std::recursive_mutex mtx;
-
-	SKNODE(int x, int top) : value(x), top_level(top), marked(false), fully_linked(false)
+	LFSKNODE(int x, int top) : value(x), top_level(top)
 	{
 		for (auto& p : next) p = nullptr;
 	}
-	SKNODE() : value(-1), top_level(0), marked(false), fully_linked(false) {
+	LFSKNODE() : value(-1), top_level(0)
+	{
 		for (auto& p : next) p = nullptr;
 	}
 };
 
-
-class L_SKLIST {
+class LF_SKLIST {
 private:
-	SKNODE* head, * tail;
+	LFSKNODE* head, * tail;
 public:
-	L_SKLIST() {
-		head = new SKNODE(std::numeric_limits<int>::min(), MAX_LEVEL);
-		tail = new SKNODE(std::numeric_limits<int>::max(), MAX_LEVEL);
+	LF_SKLIST() {
+		head = new LFSKNODE(std::numeric_limits<int>::min(), MAX_LEVEL);
+		tail = new LFSKNODE(std::numeric_limits<int>::max(), MAX_LEVEL);
 		for (auto& p : head->next) p = tail;
-		head->fully_linked = tail->fully_linked = true;
 	}
 
-	~L_SKLIST()
+	~LF_SKLIST()
 	{
 		clear();
 		delete head;
@@ -52,159 +95,144 @@ public:
 
 	void clear()
 	{
-		SKNODE* curr = head->next[0];
+		LFSKNODE* curr = head->next[0].get_ptr();
 		while (curr != tail) {
-			SKNODE* temp = curr;
-			curr = curr->next[0];
+			LFSKNODE* temp = curr;
+			curr = curr->next[0].get_ptr();
 			delete temp;
 		}
 		for (auto& p : head->next) p = tail;
 	}
 
-	int find(SKNODE* prevs[], SKNODE* currs[], int x)
+	bool find(LFSKNODE* prevs[], LFSKNODE* currs[], int x)
 	{
-		int max_level_found = -1;
+	retry:
 		auto prev = head;
 		for (int level = MAX_LEVEL; level >= 0; --level) {
-			auto curr = prev->next[level];
-			while (curr->value < x) {
-				prev = curr;
-				curr = curr->next[level];
+			auto curr = prev->next[level].get_ptr();
+			while (true) {
+				bool removed;
+				auto succ = curr->next[level].get_ptr_and_mark(&removed);
+				while (true == removed) {
+					if (false == prev->next[level].CAS(curr, succ, false, false))
+						goto retry;
+					curr = succ;
+					succ = curr->next[level].get_ptr_and_mark(&removed);
+				}
+				if (curr->value < x) {
+					prev = curr;
+					curr = succ;
+				}
+				else break;
 			}
-			if (max_level_found == -1 && curr->value == x)
-				max_level_found = level;
 			prevs[level] = prev;
 			currs[level] = curr;
 		}
-		return max_level_found;
+		return currs[0]->value == x;
 	}
 
 	bool add(int x)
 	{
-		SKNODE* prevs[MAX_LEVEL + 1];
-		SKNODE* currs[MAX_LEVEL + 1];
+		LFSKNODE* prevs[MAX_LEVEL + 1];
+		LFSKNODE* currs[MAX_LEVEL + 1];
+
+		int top_level = 0;
+		for (top_level = 0; top_level < MAX_LEVEL; ++top_level) {
+			if (rand() % 2 == 0) break;
+		}
 
 		while (true) {
-			int f_level = find(prevs, currs, x);
-
-			if (f_level != -1) {
-				SKNODE* node_found = currs[f_level];
-				if (node_found->marked) {
-					continue;
-				}
-				while (!node_found->fully_linked) {}
+			if (find(prevs, currs, x))
 				return false;
+
+			LFSKNODE* newNode = new LFSKNODE(x, top_level);
+			for (int i = 0; i <= top_level; ++i) {
+				newNode->next[i] = AMRSK(currs[i], false);
 			}
-
-			int top_level = 0;
-			for (top_level = 0; top_level < MAX_LEVEL; ++top_level) {
-				if (rand() % 2 == 0) break;
-			}
-
-			// Locking
-			int highest_locked = -1;
-			bool valid = true;
-			for (int level = 0; level <= top_level; ++level) {
-				prevs[level]->mtx.lock();
-				highest_locked = level;
-
-				valid = !prevs[level]->marked 
-					 && !currs[level]->marked 
-					 && prevs[level]->next[level] == currs[level];
-				if (false == valid) break; // 이거
-			}
-
-			if (false == valid) {
-				for (int i = 0; i <= highest_locked; ++i)
-					prevs[i]->mtx.unlock();
+			newNode->next[0] = AMRSK(currs[0], false);
+			if (not prevs[0]->next[0].CAS(currs[0], newNode, false, false))
 				continue;
+			for (int i = 1; i < top_level; ++i) {
+				while (true) {
+					if (prevs[i]->next[i].CAS(currs[i], newNode, false, false))
+						break;
+					find(prevs, currs, x);
+				}
 			}
-
-			SKNODE* newNode = new SKNODE(x, top_level);
-			for (int level = 0; level <= top_level; ++level)
-				newNode->next[level] = currs[level];
-			for (int level = 0; level <= top_level; ++level)
-				prevs[level]->next[level] = newNode;
-			newNode->fully_linked = true;
-
-			// -finally
-			for (int i = 0; i <= highest_locked; ++i)
-				prevs[i]->mtx.unlock();
 			return true;
 		}
 	}
 
 	bool remove(int x)
 	{
-		SKNODE* prevs[MAX_LEVEL + 1];
-		SKNODE* currs[MAX_LEVEL + 1];
+		LFSKNODE* prevs[MAX_LEVEL + 1];
+		LFSKNODE* currs[MAX_LEVEL + 1];
 
-		int f_level = find(prevs, currs, x);
-		if (f_level == -1) return false;
-		// Marking
-		SKNODE* victim = currs[f_level];
-		if (victim->marked) return false;
-		if (!victim->fully_linked) return false;
-		if (victim->top_level != f_level) return false;
-
-		victim->mtx.lock();
-		if (victim->marked) {
-			victim->mtx.unlock();
+		if (false == find(prevs, currs, x))
 			return false;
-		}
-
-		victim->marked = true;
+		auto victim = currs[0];
 		int top_level = victim->top_level;
-		bool valid = true;
+
+		for (int level = top_level; level >= 1; --level) {
+			bool removed = false;
+			auto succ = victim->next[level].get_ptr_and_mark(&removed);
+			while (false == removed) {
+				victim->next[level].CAS(succ, succ, false, true);
+				succ = victim->next[level].get_ptr_and_mark(&removed);
+			}
+		}
+		bool removed = false;
+		auto succ = victim->next[0].get_ptr_and_mark(&removed);
 		while (true) {
-			int highest_locked = -1;
-			for (int i = 0; i <= top_level; ++i) {
-				prevs[i]->mtx.lock();
-				highest_locked = i;
-				valid = !(prevs[i]->marked) 
-					&& prevs[i]->next[i] == victim;
-				if (false == valid) break; // 이거
-			}
-			if (false == valid) {
-				for (int i = 0; i <= highest_locked; ++i)
-					prevs[i]->mtx.unlock();
+			bool i_marked_it = victim->next[0].CAS(succ, succ, false, true);
+			succ = victim->next[0].get_ptr_and_mark(&removed);
+			if (i_marked_it) {
 				find(prevs, currs, x);
-				continue;
+				return true;
 			}
-			for (int i = top_level; i >= 0; --i) {
-				prevs[i]->next[i] = victim->next[i];
+			else if (removed) {
+				return false;
 			}
-			for (int i = highest_locked; i >= 0; --i)
-				prevs[i]->mtx.unlock();
-			victim->mtx.unlock();
-			// delete victim;
-			return true;
 		}
 	}
 
 	bool contains(int x)
 	{
-		SKNODE* prevs[MAX_LEVEL + 1];
-		SKNODE* currs[MAX_LEVEL + 1];
-		int f_level = find(prevs, currs, x);
-		return (f_level != -1)
-			&& (currs[f_level]->fully_linked == true)
-			&& (currs[f_level]->marked == false);
+		LFSKNODE* prev = head;
+		LFSKNODE* curr = nullptr;
+		bool removed;
+
+		for (int i = MAX_LEVEL; i >= 0; --i) {
+			curr = prev->next[i].get_ptr();
+			while (true) {
+				auto succ = curr->next[i].get_ptr_and_mark(&removed);
+				while (true == removed) {
+					curr = curr->next[i].get_ptr();
+					succ = curr->next[i].get_ptr_and_mark(&removed);
+				}
+				if (curr->value < x) {
+					prev = curr;
+					curr = succ;
+				}
+				else break;
+			}
+		}
+		return curr->value == x;
 	}
 
 	void print20()
 	{
-		auto curr = head->next[0];
+		auto curr = head->next[0].get_ptr();
 		for (int i = 0; i < 20 && curr != tail; ++i) {
 			std::cout << curr->value << ", ";
-			curr = curr->next[0];
+			curr = curr->next[0].get_ptr();
 		}
 		std::cout << std::endl;
 	}
 };
 
 
-L_SKLIST set;
+LF_SKLIST set;
 
 const int LOOP = 400'0000;
 const int RANGE = 1000;
