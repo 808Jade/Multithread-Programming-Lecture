@@ -57,13 +57,13 @@
     <ClCompile Include="8_무잠금 만능SET.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="9_비멈충동기화 LF_QUEUE.cpp">
+    <ClCompile Include="9-2 LF_QUEUE.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="10-1 C_STACK LF_STACK.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="9-1 LFST_QEUEUE64.cpp">
+    <ClCompile Include="9-3 LFST_QEUEUE64.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="11-1 C_SKLIST.cpp">
@@ -79,6 +79,9 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="11-3 LF_SKLIST.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="9-1 C_QUEUE.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>
